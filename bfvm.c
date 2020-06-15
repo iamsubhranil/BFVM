@@ -18,8 +18,9 @@ enum {
 	SPECIALIZED8(RIGHT),
 	INPUT,
 	OUTPUT,
-	JMPZ,  // x
-	JMPNZ, // x
+	JMPZ,       // x
+	JMPNZ,      // x
+	RESET_CELL, // reset present cell's value to 0
 	END,
 };
 
@@ -110,9 +111,15 @@ Array *compile(char *source) {
 			case '.': array_insert(program, OUTPUT); break;
 			case ',': array_insert(program, INPUT); break;
 			case '[':
-				array_insert(program, JMPZ);
-				array_insert(program, 0);
-				array_insert(&jumpstack, program->size);
+				if(*source == '-' && *(source + 1) == ']') {
+					source++; // -
+					source++; // ]
+					array_insert(program, RESET_CELL);
+				} else {
+					array_insert(program, JMPZ);
+					array_insert(program, 0);
+					array_insert(&jumpstack, program->size);
+				}
 				break;
 			case ']': {
 				if(jumpstack.size == 0) {
@@ -198,6 +205,7 @@ void execute(Array *program) {
 	                         &&LABEL_OUTPUT,
 	                         &&LABEL_JMPZ,
 	                         &&LABEL_JMPNZ,
+	                         &&LABEL_RESET_CELL,
 	                         &&LABEL_END};
 #endif
 	LOOP() {
@@ -226,6 +234,10 @@ void execute(Array *program) {
 				if(*cell) {
 					code += where;
 				}
+				DISPATCH();
+			}
+			CASE(RESET_CELL) : {
+				*cell = 0;
 				DISPATCH();
 			}
 			CASE(END) : { return; }
@@ -284,6 +296,7 @@ void transpile_rec(FILE *f, int **pgm, int level) {
 				program++; // ignore
 				*pgm = program;
 				return;
+			case RESET_CELL: fprintf(f, "*cell = 0;\n"); break;
 			case END: return;
 			case START: return;
 		}
