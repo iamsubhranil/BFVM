@@ -6,11 +6,15 @@
 
 int memory[MAX_CELLS];
 
+#define SPECIALIZED8(x) \
+	x##_1, x##_2, x##_3, x##_4, x##_5, x##_6, x##_7, x##_8, x##_X
+
 enum {
-	INCR = 0, // x
-	DECR,     // x
-	LEFT,
-	RIGHT,
+	START = 0, // dummy
+	SPECIALIZED8(INCR),
+	SPECIALIZED8(DECR),
+	SPECIALIZED8(LEFT),
+	SPECIALIZED8(RIGHT),
 	INPUT,
 	OUTPUT,
 	JMPZ,  // x
@@ -44,17 +48,59 @@ void array_free(Array *a) {
 	a->values             = NULL;
 }
 
-Array *compile(const char *source) {
+void check_repeat(char c, char **source, Array *program, int code_start) {
+	int   count = 0; // 0 based count, as c has already occurred
+	char *s     = *source;
+	while(*s == c) {
+		s++;
+		count++;
+	}
+	*source = s;
+	switch(count) {
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+		case 6:
+		case 7: array_insert(program, code_start + count); break;
+		default:
+			array_insert(program, code_start + 8);
+			array_insert(program, count + 1);
+			break;
+	}
+}
+
+void skipAll(char **s) {
+	char *source = *s;
+	while(*source) {
+		switch(*source) {
+			case '>':
+			case '<':
+			case '+':
+			case '-':
+			case '.':
+			case ',':
+			case '[':
+			case ']': *s = source; return;
+			default: source++; break;
+		}
+	}
+	*s = source;
+}
+
+Array *compile(char *source) {
 	Array *program = (Array *)malloc(sizeof(Array));
 	array_init(program);
 	Array jumpstack;
 	array_init(&jumpstack);
 	while(*source) {
 		switch(*source++) {
-			case '>': array_insert(program, RIGHT); break;
-			case '<': array_insert(program, LEFT); break;
-			case '+': array_insert(program, INCR); break;
-			case '-': array_insert(program, DECR); break;
+			case '>': check_repeat('>', &source, program, RIGHT_1); break;
+			case '<': check_repeat('<', &source, program, LEFT_1); break;
+			case '+': check_repeat('+', &source, program, INCR_1); break;
+			case '-': check_repeat('-', &source, program, DECR_1); break;
 			case '.': array_insert(program, OUTPUT); break;
 			case ',': array_insert(program, INPUT); break;
 			case '[':
@@ -75,7 +121,7 @@ Array *compile(const char *source) {
 				program->values[lastJump + 1] = program->size - lastJump - 2;
 				break;
 			}
-			default: break;
+			default: skipAll(&source); break;
 		}
 	}
 	if(jumpstack.size > 0) {
@@ -89,15 +135,34 @@ Array *compile(const char *source) {
 	return program;
 }
 
+#define SPECIALIZED8_SINGLE_INS(name, x, op, num) \
+	case name##_##num:                            \
+		x op## = num;                             \
+		break;
+#define SPECIALIZED8_INS_X(name, x, op) \
+	case name##_X:                      \
+		x op## = *code++;               \
+		break;
+#define SPECIALIZED8_IMPL(name, x, op)       \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 1); \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 2); \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 3); \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 4); \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 5); \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 6); \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 7); \
+	SPECIALIZED8_SINGLE_INS(name, x, op, 8); \
+	SPECIALIZED8_INS_X(name, x, op);
+
 void execute(Array *program) {
 	int *code = program->values;
 	int *cell = memory;
 	while(1) {
 		switch(*code++) {
-			case RIGHT: cell++; break;
-			case LEFT: cell--; break;
-			case INCR: (*cell)++; break;
-			case DECR: (*cell)--; break;
+			SPECIALIZED8_IMPL(RIGHT, cell, +);
+			SPECIALIZED8_IMPL(LEFT, cell, -);
+			SPECIALIZED8_IMPL(INCR, (*cell), +);
+			SPECIALIZED8_IMPL(DECR, (*cell), -);
 			case INPUT: *cell = getchar(); break;
 			case OUTPUT: putchar(*cell); break;
 			case JMPZ: {
