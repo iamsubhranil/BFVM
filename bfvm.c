@@ -338,10 +338,10 @@ int main(int argc, char *argv[]) {
 		printf("Error occurred while compilation!\n");
 		return 2;
 	}
+	transpile(argv[1], compiled);
 	clock_t start = clock();
 	execute(compiled);
 	printf("Elapsed: %fs\n", (double)(clock() - start) / CLOCKS_PER_SEC);
-	transpile(argv[1], compiled);
 	array_free(compiled);
 	free(compiled);
 }
