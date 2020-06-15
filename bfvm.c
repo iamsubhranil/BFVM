@@ -1,11 +1,12 @@
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
 #define MAX_CELLS 65536
 
-int memory[MAX_CELLS];
+uint8_t memory[MAX_CELLS];
 
 #define SPECIALIZED8(x) \
 	x##_1, x##_2, x##_3, x##_4, x##_5, x##_6, x##_7, x##_8, x##_X
@@ -186,8 +187,8 @@ Array *compile(char *source) {
 	SPECIALIZED8_INS_X(name, x, op);
 
 void execute(Array *program) {
-	int *code = program->values;
-	int *cell = memory;
+	int *    code = program->values;
+	uint8_t *cell = memory;
 #ifdef BFVM_COMPUTED_GOTO
 #define SPECIALIZED8_LABEL(name, x) &&LABEL_##name##_##x
 #define SPECIALIZED8_GOTO(x)                                \
@@ -314,10 +315,11 @@ void transpile(const char *filename, Array *program) {
 	}
 	FILE *f = fopen(filename, "wb");
 	fprintf(f, "#include <stdio.h>\n");
+	fprintf(f, "#include <stdint.h>\n");
 	fprintf(f, "#include <time.h>\n\n");
-	fprintf(f, "int memory[%d];\n\n", MAX_CELLS);
+	fprintf(f, "uint8_t memory[%d];\n\n", MAX_CELLS);
 	fprintf(f, "int main() {\n");
-	fprintf(f, "\tint *cell = memory;\n");
+	fprintf(f, "\tuint8_t *cell = memory;\n");
 	fprintf(f, "\tclock_t start = clock();\n");
 	int *pgm = program->values;
 	transpile_rec(f, &pgm, 1);
