@@ -1,5 +1,5 @@
 bfvm: bfvm.c
-	$(CC) bfvm.c -O3 -o bfvm
+	$(CC) bfvm.c -O3 -Wall -Wextra -o bfvm
 
 profile: bfvm.c
-	$(CC) bfvm.c -O2 -g3 -o bfvm
+	$(CC) bfvm.c -O2 -Wall -Wextra -g3 -o bfvm
