@@ -135,14 +135,32 @@ Array *compile(char *source) {
 	return program;
 }
 
+#define BFVM_COMPUTED_GOTO
+
+#define next_code() (*(code++))
+#ifdef BFVM_COMPUTED_GOTO
+#define LOOP() while(1)
+#define SWITCH() \
+	{ goto *dispatchTable[next_code()]; }
+#define CASE(x) LABEL_##x
+#define DISPATCH() goto *dispatchTable[next_code()]
+#else
+#define LOOP() while(1)
+#define SWITCH() switch(next_code())
+#define CASE(x) case x
+#define DISPATCH() break
+#endif
+
 #define SPECIALIZED8_SINGLE_INS(name, x, op, num) \
-	case name##_##num:                            \
+	CASE(name##_##num) : {                        \
 		x op## = num;                             \
-		break;
+		DISPATCH();                               \
+	}
 #define SPECIALIZED8_INS_X(name, x, op) \
-	case name##_X:                      \
+	CASE(name##_X) : {                  \
 		x op## = *code++;               \
-		break;
+		DISPATCH();                     \
+	}
 #define SPECIALIZED8_IMPL(name, x, op)       \
 	SPECIALIZED8_SINGLE_INS(name, x, op, 1); \
 	SPECIALIZED8_SINGLE_INS(name, x, op, 2); \
@@ -157,30 +175,56 @@ Array *compile(char *source) {
 void execute(Array *program) {
 	int *code = program->values;
 	int *cell = memory;
-	while(1) {
-		switch(*code++) {
-			SPECIALIZED8_IMPL(RIGHT, cell, +);
-			SPECIALIZED8_IMPL(LEFT, cell, -);
+#ifdef BFVM_COMPUTED_GOTO
+#define SPECIALIZED8_LABEL(name, x) &&LABEL_##name##_##x
+#define SPECIALIZED8_GOTO(x)                                \
+	SPECIALIZED8_LABEL(x, 1), SPECIALIZED8_LABEL(x, 2),     \
+	    SPECIALIZED8_LABEL(x, 3), SPECIALIZED8_LABEL(x, 4), \
+	    SPECIALIZED8_LABEL(x, 5), SPECIALIZED8_LABEL(x, 6), \
+	    SPECIALIZED8_LABEL(x, 7), SPECIALIZED8_LABEL(x, 8), &&LABEL_##x##_X
+
+	void *dispatchTable[] = {&&LABEL_START,
+	                         SPECIALIZED8_GOTO(INCR),
+	                         SPECIALIZED8_GOTO(DECR),
+	                         SPECIALIZED8_GOTO(LEFT),
+	                         SPECIALIZED8_GOTO(RIGHT),
+	                         &&LABEL_INPUT,
+	                         &&LABEL_OUTPUT,
+	                         &&LABEL_JMPZ,
+	                         &&LABEL_JMPNZ,
+	                         &&LABEL_END};
+#endif
+	LOOP() {
+		SWITCH() {
 			SPECIALIZED8_IMPL(INCR, (*cell), +);
 			SPECIALIZED8_IMPL(DECR, (*cell), -);
-			case INPUT: *cell = getchar(); break;
-			case OUTPUT: putchar(*cell); break;
-			case JMPZ: {
-				int where = *code++;
+			SPECIALIZED8_IMPL(LEFT, cell, -);
+			SPECIALIZED8_IMPL(RIGHT, cell, +);
+			CASE(INPUT) : {
+				*cell = getchar();
+				DISPATCH();
+			}
+			CASE(OUTPUT) : {
+				putchar(*cell);
+				DISPATCH();
+			}
+			CASE(JMPZ) : {
+				int where = next_code();
 				if(*cell == 0) {
 					code += where;
 				}
-				break;
+				DISPATCH();
 			}
-			case JMPNZ: {
-				int where = *code++;
+			CASE(JMPNZ) : {
+				int where = next_code();
 				if(*cell) {
 					code += where;
 				}
-				break;
+				DISPATCH();
 			}
-			case END: {
-				return;
+			CASE(END) : { return; }
+			CASE(START) : {
+				DISPATCH(); // dummy
 			}
 		}
 	}
