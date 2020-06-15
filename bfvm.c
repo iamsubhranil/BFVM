@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -48,10 +49,33 @@ void array_free(Array *a) {
 	a->values             = NULL;
 }
 
+bool skipAll(char **s) {
+	char *source  = *s;
+	bool  skipped = false;
+	while(*source) {
+		switch(*source) {
+			case '>':
+			case '<':
+			case '+':
+			case '-':
+			case '.':
+			case ',':
+			case '[':
+			case ']': *s = source; return skipped;
+			default:
+				source++;
+				skipped = true;
+				break;
+		}
+	}
+	*s = source;
+	return skipped;
+}
+
 void check_repeat(char c, char **source, Array *program, int code_start) {
 	int   count = 0; // 0 based count, as c has already occurred
 	char *s     = *source;
-	while(*s == c) {
+	while(*s == c || (skipAll(&s) && *s == c)) {
 		s++;
 		count++;
 	}
@@ -70,24 +94,6 @@ void check_repeat(char c, char **source, Array *program, int code_start) {
 			array_insert(program, count + 1);
 			break;
 	}
-}
-
-void skipAll(char **s) {
-	char *source = *s;
-	while(*source) {
-		switch(*source) {
-			case '>':
-			case '<':
-			case '+':
-			case '-':
-			case '.':
-			case ',':
-			case '[':
-			case ']': *s = source; return;
-			default: source++; break;
-		}
-	}
-	*s = source;
 }
 
 Array *compile(char *source) {
@@ -230,6 +236,85 @@ void execute(Array *program) {
 	}
 }
 
+#define SPECIALIZED8_SINGLE_LINE(name, x, op, num) \
+	case name##_##num:                             \
+		fprintf(f, #x " " #op "="                  \
+		              " " #num ";\n");             \
+		break;
+#define SPECIALIZED8_LINE_X(name, x, op) \
+	case name##_X:                       \
+		fprintf(f,                       \
+		        #x " " #op "="           \
+		           " "                   \
+		           "%d;\n",              \
+		        *program++);             \
+		break;
+#define SPECIALIZED8_LINE(name, x, op)        \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 1); \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 2); \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 3); \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 4); \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 5); \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 6); \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 7); \
+	SPECIALIZED8_SINGLE_LINE(name, x, op, 8); \
+	SPECIALIZED8_LINE_X(name, x, op);
+
+void transpile_rec(FILE *f, int **pgm, int level) {
+	int *program = *pgm;
+	while(1) {
+		for(int i = 0; i < level - (*program == END || *program == JMPNZ);
+		    i++) {
+			fprintf(f, "\t");
+		}
+		switch(*program++) {
+			SPECIALIZED8_LINE(INCR, (*cell), +);
+			SPECIALIZED8_LINE(DECR, (*cell), -);
+			SPECIALIZED8_LINE(LEFT, cell, -);
+			SPECIALIZED8_LINE(RIGHT, cell, +);
+			case INPUT: fprintf(f, "*cell = getchar();\n"); break;
+			case OUTPUT: fprintf(f, "putchar(*cell);\n"); break;
+			case JMPZ:
+				program++; // ignore
+				fprintf(f, "while(*cell) {\n");
+				transpile_rec(f, &program, level + 1);
+				fprintf(f, "}\n");
+				break;
+			case JMPNZ:
+				program++; // ignore
+				*pgm = program;
+				return;
+			case END: return;
+			case START: return;
+		}
+	}
+}
+
+void transpile(const char *filename, Array *program) {
+	// change all the dots to underscore
+	for(char *c = (char *)filename; *c; c++) {
+		if(*c == '.') {
+			*(c + 1) = 'c';
+			*(c + 2) = 0;
+			break;
+		}
+	}
+	FILE *f = fopen(filename, "wb");
+	fprintf(f, "#include <stdio.h>\n");
+	fprintf(f, "#include <time.h>\n\n");
+	fprintf(f, "int memory[%d];\n\n", MAX_CELLS);
+	fprintf(f, "int main() {\n");
+	fprintf(f, "\tint *cell = memory;\n");
+	fprintf(f, "\tclock_t start = clock();\n");
+	int *pgm = program->values;
+	transpile_rec(f, &pgm, 1);
+	fprintf(f, "\tprintf(\"\\nElapsed: %%fs\\n\",(double)(clock() - "
+	           "start)/CLOCKS_PER_SEC);\n");
+	fprintf(f, "\treturn 0;\n");
+	fprintf(f, "}");
+	fclose(f);
+}
+
 int main(int argc, char *argv[]) {
 	if(argc < 2) {
 		return 0;
@@ -256,6 +341,7 @@ int main(int argc, char *argv[]) {
 	clock_t start = clock();
 	execute(compiled);
 	printf("Elapsed: %fs\n", (double)(clock() - start) / CLOCKS_PER_SEC);
+	transpile(argv[1], compiled);
 	array_free(compiled);
 	free(compiled);
 }
