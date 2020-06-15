@@ -20,3 +20,9 @@ gc_map/
 *.profraw
 *.profdata
 cmake-build*/
+e.c
+mandelbrot.c
+helloworld.c
+sierpinski.c
+golden.c
+xmastree.c
