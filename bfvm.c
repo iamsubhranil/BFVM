@@ -104,9 +104,9 @@ Array *compile(char *source) {
 			case '.': array_insert(program, OUTPUT); break;
 			case ',': array_insert(program, INPUT); break;
 			case '[':
-				array_insert(&jumpstack, program->size);
 				array_insert(program, JMPZ);
 				array_insert(program, 0);
+				array_insert(&jumpstack, program->size);
 				break;
 			case ']': {
 				if(jumpstack.size == 0) {
@@ -118,7 +118,7 @@ Array *compile(char *source) {
 				int lastJump = jumpstack.values[--jumpstack.size];
 				array_insert(program, JMPNZ);
 				array_insert(program, lastJump - program->size - 1);
-				program->values[lastJump + 1] = program->size - lastJump - 2;
+				program->values[lastJump - 1] = program->size - lastJump;
 				break;
 			}
 			default: skipAll(&source); break;
