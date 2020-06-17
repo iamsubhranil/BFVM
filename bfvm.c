@@ -273,8 +273,8 @@ void execute(Array *program) {
 	SPECIALIZED8_SINGLE_LINE(name, x, op, 8); \
 	SPECIALIZED8_LINE_X(name, x, op);
 
-void transpile_rec(FILE *f, int *pgm, int level) {
-	int *program = pgm;
+void transpile_rec(FILE *f, int **pgm, int level) {
+	int *program = *pgm;
 	while(1) {
 		for(int i = 0; i < level - (*program == END || *program == JMPNZ);
 		    i++) {
@@ -290,13 +290,13 @@ void transpile_rec(FILE *f, int *pgm, int level) {
 			case JMPZ:
 				program++; // ignore
 				fprintf(f, "while(*cell) {\n");
-				level++;
+				transpile_rec(f, &program, level + 1);
+				fprintf(f, "}\n");
 				break;
 			case JMPNZ:
 				program++; // ignore
-				fprintf(f, "}\n");
-				level--;
-				break;
+				*pgm = program;
+				return;
 			case RESET_CELL: fprintf(f, "*cell = 0;\n"); break;
 			case END: return;
 			case START: return;
@@ -322,7 +322,7 @@ void transpile(const char *filename, Array *program) {
 	fprintf(f, "\tuint8_t *cell = memory;\n");
 	fprintf(f, "\tclock_t start = clock();\n");
 	int *pgm = program->values;
-	transpile_rec(f, pgm, 1);
+	transpile_rec(f, &pgm, 1);
 	fprintf(f, "\tprintf(\"\\nElapsed: %%fs\\n\",(double)(clock() - "
 	           "start)/CLOCKS_PER_SEC);\n");
 	fprintf(f, "\treturn 0;\n");
