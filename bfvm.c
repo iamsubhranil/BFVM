@@ -126,17 +126,23 @@ IntArray *compile(char *source) {
 			case '-': check_repeat('-', &source, program, DECR_1); break;
 			case '.': int_array_insert(program, OUTPUT); break;
 			case ',': int_array_insert(program, INPUT); break;
-			case '[':
-				if(*source == '-' && *(source + 1) == ']') {
-					source++; // -
-					source++; // ]
-					int_array_insert(program, RESET_CELL);
-				} else {
-					int_array_insert(program, JMPZ);
-					int_array_insert(program, 0);
-					int_array_insert(&jumpstack, program->size);
+			case '[': {
+				char *bak = source;
+				skipAll(&bak);
+				if(*bak == '-') {
+					skipAll(&bak);
+					if(*bak == ']') {
+						bak++;
+						source = bak;
+						int_array_insert(program, RESET_CELL);
+						break;
+					}
 				}
+				int_array_insert(program, JMPZ);
+				int_array_insert(program, 0);
+				int_array_insert(&jumpstack, program->size);
 				break;
+			}
 			case ']': {
 				if(jumpstack.size == 0) {
 					printf("Unmatched ']'!\n");
