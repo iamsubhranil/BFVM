@@ -321,7 +321,54 @@ void print_indent(FILE *f, int level) {
 }
 
 void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
-                  int level) {
+                  bool isPureLoop, int level) {
+	// isPureLoop = false;
+	// if this is pure loop and the net pointer shift is 0,
+	// we have some interesting possibilites
+	if(isPureLoop && pointerShift == 0) {
+		// get the total change of the value at present cell
+		int loopVarChange = 0;
+		for(int i = 0; i < totalChange->size; i++) {
+			if(totalChange->values[i].idx == 0) {
+				loopVarChange = totalChange->values[i].value;
+				break;
+			}
+		}
+		print_indent(f, level);
+		// for this loop to break, the value at cell[0] must reach
+		// to zero. so we assume that it does with the given delta
+
+		// if the change is negative, then the number of
+		// times this loop is gonna continue is value / change
+		if(loopVarChange < 0) {
+			fprintf(f, "uint8_t change = cell[0] / %d;\n", -loopVarChange);
+		} else {
+			// if the change is positive, it's gonna take (256 - value) / change
+			fprintf(f, "uint8_t change = (256 - cell[0]) / %d;\n",
+			        loopVarChange);
+		}
+		// now for the rest of the cells, the total change will be
+		// (change * delta of the particular cell)
+		for(int i = 0; i < totalChange->size; i++) {
+			if(totalChange->values[i].idx != 0) {
+				print_indent(f, level);
+				fprintf(f, "cell[%d] += (change * %d);\n",
+				        totalChange->values[i].idx,
+				        totalChange->values[i].value);
+			}
+		}
+		// we explicitly set the cell to 0
+		print_indent(f, level);
+		fprintf(f, "cell[0] = 0;\n");
+		// and we add a 'break' so that the compiler can
+		// optimize away the loop
+		print_indent(f, level);
+		fprintf(f, "break;\n");
+		// release the array
+		Change_array_free(totalChange);
+		// we're done
+		return;
+	}
 	// dump the changes
 	for(int i = 0; i < totalChange->size; i++) {
 		print_indent(f, level);
@@ -461,23 +508,25 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 	// Pointer to the present cell, with respect to
 	// the start of the loop
 	int currentPointer = startPointer;
-	// Each index i of the array holds the total increment
+	// Each cell of the array holds the total increment
 	// / decrement of the cell at pointer i with respect
 	// to the present loop
 	ChangeArray totalChange;
 	Change_array_init(&totalChange);
+	// denotes if this is a pure loop, i.e. a loop containing
+	// no subloops inside
+	bool isPureLoop = true;
 	while(1) {
 		// flush out the changes as required
 		switch(*program) {
-			// case INPUT:
 			case OUTPUT:
-			case JMPZ:
-			case JMPNZ:
 			case RESET_CELL:
-			case END:
 			case START:
+			case JMPZ: isPureLoop = false;
+			case END:
+			case JMPNZ:
 				dump_changes(f, &totalChange, currentPointer - startPointer,
-				             level);
+				             isPureLoop, level);
 				print_indent(f, level - (*program == END || *program == JMPNZ));
 				startPointer = currentPointer;
 				break;
@@ -504,6 +553,7 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 #endif
 				break;
 			case JMPZ:
+				isPureLoop = false;
 				program++; // ignore
 				fprintf(f, "while(*cell) {\n");
 				startPointer = currentPointer = transpile_rec(
