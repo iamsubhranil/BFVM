@@ -350,7 +350,6 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 	// if this is pure loop and the net pointer shift is 0,
 	// we have some interesting possibilites
 	if(isPureLoop && pointerShift == 0) {
-		static int changeCounter = 0;
 		// decrease the level because we are not gonna
 		// insert a loop anymore
 		level--;
@@ -369,20 +368,18 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 		// if the change is negative, then the number of
 		// times this loop is gonna continue is value / change
 		if(loopVarChange < 0) {
-			fprintf(f, "char change%d = cell[0] / %d;\n", changeCounter,
-			        -loopVarChange);
+			fprintf(f, "change = cell[0] / %d;\n", -loopVarChange);
 		} else {
 			// if the change is positive, it's gonna take (256 - value) / change
-			fprintf(f, "char change%d = (256 - cell[0]) / %d;\n", changeCounter,
-			        loopVarChange);
+			fprintf(f, "change = (256 - cell[0]) / %d;\n", loopVarChange);
 		}
 		// now for the rest of the cells, the total change will be
 		// (change * delta of the particular cell)
 		for(int i = 0; i < totalChange->size; i++) {
 			if(totalChange->values[i].idx != 0) {
 				print_indent(f, level);
-				fprintf(f, "cell[%d] += (change%d * %d);\n",
-				        totalChange->values[i].idx, changeCounter,
+				fprintf(f, "cell[%d] += (change * %d);\n",
+				        totalChange->values[i].idx,
 				        totalChange->values[i].value);
 			}
 		}
@@ -392,8 +389,6 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 		// release the array
 		Change_array_free(totalChange);
 		// we're done
-		// increment the changeCounter
-		changeCounter++;
 		return;
 	}
 	print_header(f, level, headerPrinted, fromJump);
@@ -641,6 +636,8 @@ void transpile(const char *filename, IntArray *program) {
 	fprintf(f, "int main() {\n");
 	fprintf(f, "\tchar *cell = memory;\n");
 	fprintf(f, "\tclock_t start = clock();\n");
+	fprintf(f, "\tchar change = 0;\n");
+	fprintf(f, "\t(void)change;\n");
 	int *pgm = program->values;
 	transpile_rec(f, program->values, &pgm, 0, 1, false);
 	fprintf(f, "\tprintf(\"\\nElapsed: %%fs\\n\",(double)(clock() - "
