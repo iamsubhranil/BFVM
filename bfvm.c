@@ -393,16 +393,10 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 	}
 	print_header(f, level, headerPrinted, fromJump);
 	// dump the changes
-	int increment = 0;
 	for(int i = 0; i < totalChange->size; i++) {
-		int shift = totalChange->values[i].idx - increment;
-		increment += shift;
-		if(shift != 0) {
-			print_indent(f, level);
-			print_signaware(f, "cell", shift);
-		}
 		print_indent(f, level);
-		print_signaware(f, "*cell", totalChange->values[i].value);
+		fprintf(f, "cell[%d]", totalChange->values[i].idx);
+		print_signaware(f, "", totalChange->values[i].value);
 #ifdef DEBUG
 		// print the value of the cell
 		fprintf(f, "#ifdef DEBUG\n");
@@ -415,9 +409,9 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 		fprintf(f, "#endif\n");
 #endif
 	}
-	if(pointerShift != increment) {
+	if(pointerShift != 0) {
 		print_indent(f, level);
-		print_signaware(f, "cell", pointerShift - increment);
+		print_signaware(f, "cell", pointerShift);
 	}
 #ifdef DEBUG
 	if(pointerShift != 0 || totalChange->size == 0) {
