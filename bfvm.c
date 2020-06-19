@@ -6,7 +6,7 @@
 
 #define MAX_CELLS 65536
 
-uint8_t memory[MAX_CELLS];
+char memory[MAX_CELLS];
 
 #define SPECIALIZED8(x) \
 	x##_1, x##_2, x##_3, x##_4, x##_5, x##_6, x##_7, x##_8, x##_X
@@ -257,8 +257,8 @@ void disassemble_all(IntArray *pgm) {
 	SPECIALIZED8_INS_X(name, x, op);
 
 void execute(IntArray *program) {
-	int *    code = program->values;
-	uint8_t *cell = memory;
+	int * code = program->values;
+	char *cell = memory;
 #ifdef BFVM_COMPUTED_GOTO
 #define SPECIALIZED8_LABEL(name, x) &&LABEL_##name##_##x
 #define SPECIALIZED8_GOTO(x)                                \
@@ -356,11 +356,10 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 		// if the change is negative, then the number of
 		// times this loop is gonna continue is value / change
 		if(loopVarChange < 0) {
-			fprintf(f, "uint8_t change = cell[0] / %d;\n", -loopVarChange);
+			fprintf(f, "char change = cell[0] / %d;\n", -loopVarChange);
 		} else {
 			// if the change is positive, it's gonna take (256 - value) / change
-			fprintf(f, "uint8_t change = (256 - cell[0]) / %d;\n",
-			        loopVarChange);
+			fprintf(f, "char change = (256 - cell[0]) / %d;\n", loopVarChange);
 		}
 		// now for the rest of the cells, the total change will be
 		// (change * delta of the particular cell)
@@ -611,9 +610,9 @@ void transpile(const char *filename, IntArray *program) {
 	fprintf(f, "#include <stdio.h>\n");
 	fprintf(f, "#include <stdint.h>\n");
 	fprintf(f, "#include <time.h>\n\n");
-	fprintf(f, "uint8_t memory[%d];\n\n", MAX_CELLS);
+	fprintf(f, "char memory[%d];\n\n", MAX_CELLS);
 	fprintf(f, "int main() {\n");
-	fprintf(f, "\tuint8_t *cell = memory;\n");
+	fprintf(f, "\tchar *cell = memory;\n");
 	fprintf(f, "\tclock_t start = clock();\n");
 	int *pgm = program->values;
 	transpile_rec(f, program->values, &pgm, 0, 1);
