@@ -327,6 +327,14 @@ void print_indent(FILE *f, int level) {
 	for(int i = 0; i < level; i++) fprintf(f, "\t");
 }
 
+void print_signaware(FILE *f, const char *lhs, int rhs) {
+	if(rhs < 0) {
+		fprintf(f, "%s -= %d;\n", lhs, -rhs);
+	} else {
+		fprintf(f, "%s += %d;\n", lhs, rhs);
+	}
+}
+
 void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
                   bool isPureLoop, int level) {
 	// isPureLoop = false;
@@ -377,10 +385,16 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 		return;
 	}
 	// dump the changes
+	int increment = 0;
 	for(int i = 0; i < totalChange->size; i++) {
+		int shift = totalChange->values[i].idx - increment;
+		increment += shift;
+		if(shift != 0) {
+			print_indent(f, level);
+			print_signaware(f, "cell", shift);
+		}
 		print_indent(f, level);
-		fprintf(f, "cell[%d] += %d;\n", totalChange->values[i].idx,
-		        totalChange->values[i].value);
+		print_signaware(f, "*cell", totalChange->values[i].value);
 #ifdef DEBUG
 		// print the value of the cell
 		fprintf(f, "#ifdef DEBUG\n");
@@ -393,9 +407,9 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 		fprintf(f, "#endif\n");
 #endif
 	}
-	if(pointerShift != 0) {
+	if(pointerShift != increment) {
 		print_indent(f, level);
-		fprintf(f, "cell += %d;\n", pointerShift);
+		print_signaware(f, "cell", pointerShift - increment);
 	}
 #ifdef DEBUG
 	if(pointerShift != 0 || totalChange->size == 0) {
