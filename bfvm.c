@@ -129,7 +129,8 @@ IntArray *compile(char *source) {
 			case '[': {
 				char *bak = source;
 				skipAll(&bak);
-				if(*bak == '-') {
+				if(*bak == '-' || *bak == '+') {
+					bak++;
 					skipAll(&bak);
 					if(*bak == ']') {
 						bak++;
