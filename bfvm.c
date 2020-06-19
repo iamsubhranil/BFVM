@@ -335,12 +335,25 @@ void print_signaware(FILE *f, const char *lhs, int rhs) {
 	}
 }
 
+void print_header(FILE *f, int level, bool *headerPrinted, bool fromJump) {
+	if(fromJump && !*headerPrinted) {
+		print_indent(f, level - 1);
+		fprintf(f, "while(*cell) {\n");
+		*headerPrinted = true;
+	}
+}
+
 void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
-                  bool isPureLoop, int level) {
+                  bool isPureLoop, int level, bool *headerPrinted,
+                  bool fromJump) {
 	// isPureLoop = false;
 	// if this is pure loop and the net pointer shift is 0,
 	// we have some interesting possibilites
 	if(isPureLoop && pointerShift == 0) {
+		static int changeCounter = 0;
+		// decrease the level because we are not gonna
+		// insert a loop anymore
+		level--;
 		// get the total change of the value at present cell
 		int loopVarChange = 0;
 		for(int i = 0; i < totalChange->size; i++) {
@@ -356,33 +369,34 @@ void dump_changes(FILE *f, ChangeArray *totalChange, int pointerShift,
 		// if the change is negative, then the number of
 		// times this loop is gonna continue is value / change
 		if(loopVarChange < 0) {
-			fprintf(f, "char change = cell[0] / %d;\n", -loopVarChange);
+			fprintf(f, "char change%d = cell[0] / %d;\n", changeCounter,
+			        -loopVarChange);
 		} else {
 			// if the change is positive, it's gonna take (256 - value) / change
-			fprintf(f, "char change = (256 - cell[0]) / %d;\n", loopVarChange);
+			fprintf(f, "char change%d = (256 - cell[0]) / %d;\n", changeCounter,
+			        loopVarChange);
 		}
 		// now for the rest of the cells, the total change will be
 		// (change * delta of the particular cell)
 		for(int i = 0; i < totalChange->size; i++) {
 			if(totalChange->values[i].idx != 0) {
 				print_indent(f, level);
-				fprintf(f, "cell[%d] += (change * %d);\n",
-				        totalChange->values[i].idx,
+				fprintf(f, "cell[%d] += (change%d * %d);\n",
+				        totalChange->values[i].idx, changeCounter,
 				        totalChange->values[i].value);
 			}
 		}
 		// we explicitly set the cell to 0
 		print_indent(f, level);
 		fprintf(f, "cell[0] = 0;\n");
-		// and we add a 'break' so that the compiler can
-		// optimize away the loop
-		print_indent(f, level);
-		fprintf(f, "break;\n");
 		// release the array
 		Change_array_free(totalChange);
 		// we're done
+		// increment the changeCounter
+		changeCounter++;
 		return;
 	}
+	print_header(f, level, headerPrinted, fromJump);
 	// dump the changes
 	int increment = 0;
 	for(int i = 0; i < totalChange->size; i++) {
@@ -522,9 +536,10 @@ void fdisassemble(FILE *f, int ip, int *program, int level) {
 #endif
 
 // returns the current cell pointer
-int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
-                  int level) {
-	int *program = *pgm;
+int transpile_rec(FILE *f, int *source, int **pgm, int startPointer, int level,
+                  bool fromJump) {
+	bool headerPrinted = !fromJump;
+	int *program       = *pgm;
 	// Pointer to the present cell, with respect to
 	// the start of the loop
 	int currentPointer = startPointer;
@@ -541,6 +556,10 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 		int bakOpcode = *program;
 		// flush out the changes as required
 		switch(*program) {
+			case INPUT:
+				print_header(f, level, &headerPrinted, fromJump);
+				print_indent(f, level);
+				break;
 			case OUTPUT:
 			case RESET_CELL:
 			case START:
@@ -548,8 +567,10 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 			case END:
 			case JMPNZ:
 				dump_changes(f, &totalChange, currentPointer - startPointer,
-				             isPureLoop, level);
-				print_indent(f, level - (*program == END || *program == JMPNZ));
+				             isPureLoop, level, &headerPrinted, fromJump);
+				if(headerPrinted && *program != JMPZ)
+					print_indent(f, level -
+					                    (*program == END || *program == JMPNZ));
 				startPointer = currentPointer;
 				break;
 		}
@@ -562,7 +583,6 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 			SPECIALIZED8_LINE(LEFT, currentPointer, -);
 			SPECIALIZED8_LINE(RIGHT, currentPointer, +);
 			case INPUT:
-				print_indent(f, level);
 				fprintf(f, "cell[%d] = getchar();\n",
 				        currentPointer - startPointer);
 				break;
@@ -577,16 +597,16 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 			case JMPZ:
 				isPureLoop = false;
 				program++; // ignore
-				fprintf(f, "while(*cell) {\n");
 				startPointer = currentPointer = transpile_rec(
-				    f, source, &program, currentPointer, level + 1);
-				fprintf(f, "}\n");
+				    f, source, &program, currentPointer, level + 1, true);
 				// reinit the array
 				Change_array_init(&totalChange);
 				break;
 			case JMPNZ:
 				program++; // ignore
 				*pgm = program;
+				if(headerPrinted)
+					fprintf(f, "}\n");
 				return currentPointer;
 			case RESET_CELL:
 				// if we just got out of a loop, *cell will already
@@ -622,7 +642,7 @@ void transpile(const char *filename, IntArray *program) {
 	fprintf(f, "\tchar *cell = memory;\n");
 	fprintf(f, "\tclock_t start = clock();\n");
 	int *pgm = program->values;
-	transpile_rec(f, program->values, &pgm, 0, 1);
+	transpile_rec(f, program->values, &pgm, 0, 1, false);
 	fprintf(f, "\tprintf(\"\\nElapsed: %%fs\\n\",(double)(clock() - "
 	           "start)/CLOCKS_PER_SEC);\n");
 	fprintf(f, "\treturn 0;\n");
