@@ -536,7 +536,9 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 	// denotes if this is a pure loop, i.e. a loop containing
 	// no subloops inside
 	bool isPureLoop = true;
+	int  lastOpcode = END;
 	while(1) {
+		int bakOpcode = *program;
 		// flush out the changes as required
 		switch(*program) {
 			case OUTPUT:
@@ -587,13 +589,18 @@ int transpile_rec(FILE *f, int *source, int **pgm, int startPointer,
 				*pgm = program;
 				return currentPointer;
 			case RESET_CELL:
+				// if we just got out of a loop, *cell will already
+				// be zero
 				// print_indent(f, level);
-				// fprintf(f, "cell[%d] = 0;\n", currentPointer - startPointer);
-				fprintf(f, "*cell = 0;\n");
+				// fprintf(f, "cell[%d] = 0;\n", currentPointer -
+				// startPointer);
+				if(lastOpcode != JMPNZ)
+					fprintf(f, "*cell = 0;\n");
 				break;
 			case END: return currentPointer;
 			case START: return currentPointer;
 		}
+		lastOpcode = bakOpcode;
 	}
 }
 
