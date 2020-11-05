@@ -256,7 +256,7 @@ void disassemble_all(IntArray *pgm) {
 	SPECIALIZED8_SINGLE_INS(name, x, op, 8); \
 	SPECIALIZED8_INS_X(name, x, op);
 
-void execute(IntArray *program) {
+void execute(IntArray *program, FILE *stream) {
 	int * code = program->values;
 	char *cell = memory;
 #ifdef BFVM_COMPUTED_GOTO
@@ -290,7 +290,7 @@ void execute(IntArray *program) {
 			SPECIALIZED8_IMPL(LEFT, cell, -);
 			SPECIALIZED8_IMPL(RIGHT, cell, +);
 			CASE(INPUT) : {
-				*cell = getchar();
+				*cell = fgetc(stream);
 				DISPATCH();
 			}
 			CASE(OUTPUT) : {
@@ -643,19 +643,33 @@ void transpile(const char *filename, IntArray *program) {
 
 int main(int argc, char *argv[]) {
 	if(argc < 2) {
+		printf("Usage: %s <bf source code> [<input data>]\n", argv[0]);
 		return 0;
 	}
+	printf("Running %s..\n", argv[1]);
+
+	FILE *readstream = stdin;
+	if(argc > 2) {
+		readstream = fopen(argv[2], "rb");
+		if(readstream == NULL) {
+			printf("Unable to open input file!\n");
+			return 2;
+		}
+	}
+
 	FILE *f = fopen(argv[1], "rb");
 	if(f == NULL) {
 		printf("Unable to open the file!\n");
 		return 1;
 	}
+
 	fseek(f, 0, SEEK_END);
 	long len = ftell(f);
 	fseek(f, 0, SEEK_SET);
 	char *program = (char *)malloc(len + 1);
 	fread(program, len, 1, f);
 	fclose(f);
+
 	program[len] = 0;
 	// printf("%s\n", program);
 	IntArray *compiled = compile(program);
@@ -667,7 +681,9 @@ int main(int argc, char *argv[]) {
 	// disassemble_all(compiled);
 	transpile(argv[1], compiled);
 	clock_t start = clock();
-	execute(compiled);
+	execute(compiled, readstream);
+	if(readstream != stdin)
+		fclose(readstream);
 	printf("Elapsed: %fs\n", (double)(clock() - start) / CLOCKS_PER_SEC);
 	int_array_free(compiled);
 	free(compiled);
